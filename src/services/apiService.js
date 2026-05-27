@@ -1,8 +1,8 @@
 'use strict';
 
-const { isConfigured } = require('../config');
-const { isStripeConfigured } = require('../config/stripe');
-const { isMomoConfigured } = require('../config/momo');
+const { isConfigured, VNP_RETURNURL } = require('../config');
+const { isStripeConfigured, STRIPE_SUCCESS_URL, STRIPE_CANCEL_URL } = require('../config/stripe');
+const { isMomoConfigured, MOMO_REDIRECT_URL, MOMO_IPN_URL } = require('../config/momo');
 const {
   generateTxnRef,
   normalizeIp,
@@ -31,6 +31,13 @@ function getHealthStatus() {
     stripeConfigured: isStripeConfigured(),
     momoConfigured: isMomoConfigured(),
     sandbox: true,
+    urls: {
+      vnpayReturn: VNP_RETURNURL,
+      stripeSuccess: STRIPE_SUCCESS_URL,
+      stripeCancel: STRIPE_CANCEL_URL,
+      momoRedirect: MOMO_REDIRECT_URL,
+      momoIpn: MOMO_IPN_URL,
+    },
   };
 }
 
