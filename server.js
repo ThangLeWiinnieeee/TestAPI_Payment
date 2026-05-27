@@ -3,7 +3,7 @@
 const express = require('express');
 const path = require('path');
 
-const { PORT } = require('./src/config');
+const { PORT, VNP_TMNCODE, isConfigured } = require('./src/config');
 const { connectDB } = require('./src/config/db');
 const { registerRoutes } = require('./src/routes');
 const { handleStripeWebhook } = require('./src/controllers/stripeController');
@@ -44,10 +44,15 @@ app.post('/stripe/webhook', express.raw({ type: 'application/json' }), handleStr
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+
+// Static files are served by Vercel (@vercel/static via vercel.json) in production.
+// In local dev, express.static handles public/ below.
+if (!isVercel) {
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+}
 
 registerRoutes(app);
 
@@ -55,7 +60,6 @@ async function bootstrap() {
   await ensureDb();
 
   app.listen(PORT, () => {
-    const { VNP_TMNCODE, isConfigured } = require('./src/config');
     console.log(`VNPAY demo -> http://localhost:${PORT}`);
     console.log(` TmnCode : ${VNP_TMNCODE}`);
     console.log(` Configured : ${isConfigured()}`);
