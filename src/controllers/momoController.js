@@ -45,7 +45,9 @@ async function handleReturn(req, res) {
 
     return res.redirect(redirectUrl);
   } catch (error) {
-    return sendJsonError(res, error);
+    // Always redirect — never show raw JSON to browser on return URL
+    console.error('[MoMo return] Unexpected error:', error.message);
+    return res.redirect('/payment-result.html?provider=momo&success=0&responseCode=99&txnRef=unknown&verified=0');
   }
 }
 

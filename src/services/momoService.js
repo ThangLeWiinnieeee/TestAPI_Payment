@@ -248,13 +248,15 @@ async function confirmIpn(body, reqInfo = {}) {
 }
 
 async function buildReturnRedirect(query, reqInfo = {}) {
-  assertMomoConfigured();
-
   const payload = getResultPayload(query);
   const orderId = payload.orderId || 'unknown';
   const resultCode = valueOf(payload.resultCode || 'unknown');
   const amount = valueOf(payload.amount || 0);
-  const verified = payload.orderId ? verifyMomoResult(payload) : false;
+
+  // Chỉ verify chữ ký nếu MoMo đã được cấu hình, còn không thì verified = false
+  const verified = isMomoConfigured() && payload.orderId
+    ? verifyMomoResult(payload)
+    : false;
   const success = verified && resultCode === '0';
 
   if (payload.orderId) {
