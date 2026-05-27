@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chọn thanh toán - Sandbox thanh toán</title>
+  <meta name="description" content="Chọn phương thức thanh toán sandbox cho đơn hàng" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/shared.css" />
+  <link rel="stylesheet" href="/css/create-order.css" />
+  <link rel="stylesheet" href="/css/payment-method.css" />
+  <script src="https://cdn.jsdelivr.net/npm/axios@1/dist/axios.min.js"></script>
+  <script src="/js/api-client.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">₫</div>
+      <div>
+        <div class="logo-name">Thanh toán</div>
+        <div class="logo-sub">Kiểm thử sandbox</div>
+      </div>
+    </div>
+
+    <div id="status-badge" class="status-badge checking">Đang kiểm tra...</div>
+
+    <div class="sidebar-section">
+      <div class="section-label">VNPAY test ATM</div>
+      <div class="test-card">
+        <div class="tc-row"><span>Số thẻ</span><code>9704198526191432198</code></div>
+        <div class="tc-row"><span>Ngày HH</span><code>07/15</code></div>
+        <div class="tc-row"><span>Tên</span><code>NGUYEN VAN A</code></div>
+        <div class="tc-row"><span>OTP</span><code>123456</code></div>
+      </div>
+      <button class="btn-copy" id="copy-btn" onclick="copyCard()">Sao chép số thẻ</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Thẻ kiểm thử Stripe</div>
+      <div class="test-card">
+        <div class="tc-row"><span>Thẻ</span><code>4242 4242 4242 4242</code></div>
+        <div class="tc-row"><span>Hết hạn</span><code>12/34</code></div>
+        <div class="tc-row"><span>CVC</span><code>123</code></div>
+        <div class="tc-row"><span>Chế độ</span><code>Test</code></div>
+      </div>
+      <button class="btn-copy" id="copy-stripe-btn" onclick="copyStripeCard()">Sao chép số thẻ</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1>Chọn phương thức thanh toán</h1>
+      <p class="topbar-sub">Thông tin đơn đã sẵn sàng. Hãy chọn cổng thanh toán phù hợp.</p>
+    </header>
+
+    <section class="card">
+      <div class="card-header-row">
+        <div>
+          <div class="card-tag">Đơn hàng</div>
+          <h2 class="card-title">Tóm tắt giao dịch</h2>
+        </div>
+        <button class="btn-ghost compact" type="button" onclick="goBackToCreate()">Quay lại</button>
+      </div>
+
+      <div class="order-summary" id="order-summary">
+        <div class="summary-item"><span>Mã giao dịch</span><strong id="sum-txn">Đang tải...</strong></div>
+        <div class="summary-item"><span>Số tiền</span><strong id="sum-amount">Đang tải...</strong></div>
+        <div class="summary-item"><span>Tiền tệ</span><strong id="sum-currency">Đang tải...</strong></div>
+        <div class="summary-item"><span>Mô tả</span><strong id="sum-info">Đang tải...</strong></div>
+        <div class="summary-item"><span>Trạng thái</span><strong id="sum-status">Đang tải...</strong></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-tag">Cổng</div>
+        <h2 class="card-title">Chọn cổng thanh toán</h2>
+        <p class="card-desc">VNPAY và MoMo hỗ trợ VND. Stripe hỗ trợ VND và USD cho thanh toán quốc tế.</p>
+      </div>
+
+      <div class="method-grid">
+        <button class="payment-method gateway-ready" id="vnpay-btn" onclick="payWithVnpay()">
+          <span class="method-mark vnpay">VN</span>
+          <span class="method-body">
+            <strong>VNPAY Sandbox</strong>
+            <span>ATM nội địa, QR test, chỉ hỗ trợ VND</span>
+          </span>
+          <span class="method-status ready" id="vnpay-status">Sẵn sàng</span>
+        </button>
+
+        <button class="payment-method gateway-ready" id="stripe-btn" onclick="payWithStripe()">
+          <span class="method-mark stripe">ST</span>
+          <span class="method-body">
+            <strong>Stripe Checkout</strong>
+            <span>Hosted checkout, thẻ quốc tế test</span>
+          </span>
+          <span class="method-status ready" id="stripe-status">Sẵn sàng</span>
+        </button>
+
+        <button class="payment-method gateway-ready" id="momo-btn" onclick="payWithMomo()">
+          <span class="method-mark momo">MM</span>
+          <span class="method-body">
+            <strong>MoMo Sandbox</strong>
+            <span>Ví MoMo, QR/app test, chỉ hỗ trợ VND</span>
+          </span>
+          <span class="method-status ready" id="momo-status">Sẵn sàng</span>
+        </button>
+
+        <button class="payment-method" disabled>
+          <span class="method-mark other">OT</span>
+          <span class="method-body">
+            <strong>Gateway khác</strong>
+            <span>ZaloPay, PayOS hoặc cổng nội bộ</span>
+          </span>
+          <span class="method-status later">Sắp hỗ trợ</span>
+        </button>
+      </div>
+
+      <div class="error-msg" id="error-msg"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const txnRef = params.get('txnRef') || '';
+const DRAFT_PREFIX = 'paymentDraft:';
+const LAST_DRAFT_KEY = 'paymentDraft:last';
+const STRIPE_SESSION_PREFIX = 'stripeSession:';
+
+let currentOrder = null;
+let gatewayConfig = { vnpay: false, stripe: false, momo: false };
+
+function fmtMoney(amount, currency = 'vnd') {
+  const normalizedCurrency = String(currency || 'vnd').toLowerCase();
+  const numericAmount = Number(amount || 0);
+
+  if (normalizedCurrency === 'usd') {
+    return numericAmount.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    });
+  }
+
+  return numericAmount.toLocaleString('vi-VN') + ' ₫';
+}
+
+function setError(message) {
+  document.getElementById('error-msg').textContent = message || '';
+}
+
+function renderOrder(order) {
+  document.getElementById('sum-txn').textContent = order.txnRef;
+  document.getElementById('sum-amount').textContent = fmtMoney(order.amount, order.currency);
+  document.getElementById('sum-currency').textContent = String(order.currency || 'vnd').toUpperCase();
+  document.getElementById('sum-info').textContent = order.orderInfo || 'Thanh toán đơn hàng';
+  document.getElementById('sum-status').textContent = order.status || 'Chưa thanh toán';
+}
+
+function syncGatewayAvailability() {
+  const isUsd = String(currentOrder?.currency || 'vnd').toLowerCase() === 'usd';
+  const vnpayBtn = document.getElementById('vnpay-btn');
+  const vnpayStatus = document.getElementById('vnpay-status');
+  const stripeBtn = document.getElementById('stripe-btn');
+  const stripeStatus = document.getElementById('stripe-status');
+  const momoBtn = document.getElementById('momo-btn');
+  const momoStatus = document.getElementById('momo-status');
+
+  const vnpayReady = gatewayConfig.vnpay && !isUsd;
+  vnpayBtn.disabled = !vnpayReady;
+  vnpayBtn.classList.toggle('gateway-ready', vnpayReady);
+  vnpayStatus.textContent = isUsd
+    ? 'Chỉ hỗ trợ VND'
+    : gatewayConfig.vnpay ? 'Sẵn sàng' : 'Thiếu config';
+  vnpayStatus.className = 'method-status ' + (vnpayReady ? 'ready' : 'later');
+
+  stripeBtn.disabled = !gatewayConfig.stripe;
+  stripeBtn.classList.toggle('gateway-ready', gatewayConfig.stripe);
+  stripeStatus.textContent = gatewayConfig.stripe ? 'Sẵn sàng' : 'Thiếu config';
+  stripeStatus.className = 'method-status ' + (gatewayConfig.stripe ? 'ready' : 'later');
+
+  const momoReady = gatewayConfig.momo && !isUsd;
+  momoBtn.disabled = !momoReady;
+  momoBtn.classList.toggle('gateway-ready', momoReady);
+  momoStatus.textContent = isUsd
+    ? 'Chỉ hỗ trợ VND'
+    : gatewayConfig.momo ? 'Sẵn sàng' : 'Thiếu config';
+  momoStatus.className = 'method-status ' + (momoReady ? 'ready' : 'later');
+}
+
+async function loadOrder() {
+  if (!txnRef) {
+    window.location.replace('/create-order.html');
+    return;
+  }
+
+  const draft = JSON.parse(sessionStorage.getItem(DRAFT_PREFIX + txnRef) || 'null');
+  if (!draft) {
+    throw new Error('Không tìm thấy thông tin đơn tạm. Hãy quay lại tạo đơn.');
+  }
+
+  currentOrder = draft;
+  renderOrder(draft);
+  syncGatewayAvailability();
+}
+
+async function payWithVnpay() {
+  if (!currentOrder) return;
+  if (String(currentOrder.currency || 'vnd').toLowerCase() !== 'vnd') {
+    setError('VNPAY chỉ hỗ trợ thanh toán bằng VND. Vui lòng chọn Stripe cho đơn USD.');
+    return;
+  }
+
+  const btn = document.getElementById('vnpay-btn');
+  btn.disabled = true;
+  setError('');
+
+  try {
+    const { data } = await apiClient.post('/payment/create', currentOrder);
+
+    window.location.href = data.payUrl;
+  } catch (err) {
+    btn.disabled = false;
+    setError(getApiErrorMessage(err, 'Không thể tạo URL VNPAY.'));
+  }
+}
+
+async function payWithStripe() {
+  if (!currentOrder) return;
+
+  const btn = document.getElementById('stripe-btn');
+  btn.disabled = true;
+  setError('');
+
+  try {
+    const { data } = await apiClient.post('/stripe/checkout', currentOrder);
+
+    sessionStorage.setItem(STRIPE_SESSION_PREFIX + data.txnRef, data.sessionId);
+    window.location.href = data.url;
+  } catch (err) {
+    btn.disabled = false;
+    setError(getApiErrorMessage(err, 'Không thể tạo phiên Stripe Checkout.'));
+  }
+}
+
+async function payWithMomo() {
+  if (!currentOrder) return;
+  if (String(currentOrder.currency || 'vnd').toLowerCase() !== 'vnd') {
+    setError('MoMo chỉ hỗ trợ thanh toán bằng VND. Vui lòng chọn Stripe cho đơn USD.');
+    return;
+  }
+
+  const btn = document.getElementById('momo-btn');
+  btn.disabled = true;
+  setError('');
+
+  try {
+    const { data } = await apiClient.post('/momo/create', currentOrder);
+
+    window.location.href = data.payUrl;
+  } catch (err) {
+    btn.disabled = false;
+    setError(getApiErrorMessage(err, 'Không thể tạo URL MoMo.'));
+  }
+}
+
+function copyCard() {
+  navigator.clipboard.writeText('9704198526191432198').then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Đã sao chép!';
+    setTimeout(() => { btn.textContent = 'Sao chép số thẻ'; }, 2000);
+  });
+}
+
+function copyStripeCard() {
+  navigator.clipboard.writeText('4242424242424242').then(() => {
+    const btn = document.getElementById('copy-stripe-btn');
+    btn.textContent = 'Đã sao chép!';
+    setTimeout(() => { btn.textContent = 'Sao chép số thẻ'; }, 2000);
+  });
+}
+
+function goBackToCreate() {
+  if (currentOrder?.txnRef) {
+    sessionStorage.setItem(LAST_DRAFT_KEY, currentOrder.txnRef);
+  }
+
+  window.location.href = '/create-order.html';
+}
+
+async function checkHealth() {
+  const badge = document.getElementById('status-badge');
+  const vnpayBtn = document.getElementById('vnpay-btn');
+  const stripeBtn = document.getElementById('stripe-btn');
+  const momoBtn = document.getElementById('momo-btn');
+
+  try {
+    const { data: d } = await apiClient.get('/api/health');
+    const readyCount = [d.configured, d.stripeConfigured, d.momoConfigured].filter(Boolean).length;
+    badge.textContent = readyCount ? `${readyCount} cổng sẵn sàng` : 'Thiếu config .env';
+    badge.className = 'status-badge ' + (readyCount ? 'ok' : 'warn');
+
+    gatewayConfig = {
+      vnpay: Boolean(d.configured),
+      stripe: Boolean(d.stripeConfigured),
+      momo: Boolean(d.momoConfigured),
+    };
+    syncGatewayAvailability();
+  } catch {
+    badge.textContent = 'Server offline';
+    badge.className = 'status-badge error';
+    vnpayBtn.disabled = true;
+    vnpayBtn.classList.remove('gateway-ready');
+    stripeBtn.disabled = true;
+    stripeBtn.classList.remove('gateway-ready');
+    momoBtn.disabled = true;
+    momoBtn.classList.remove('gateway-ready');
+  }
+}
+
+loadOrder().catch(err => setError(err.message));
+checkHealth();
+</script>
+</body>
+</html>

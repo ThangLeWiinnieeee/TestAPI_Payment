@@ -1,0 +1,8 @@
+Email: test@example.com
+
+Card number: 4242 4242 4242 4242
+MM / YY: 12 / 34
+CVC: 123
+
+Cardholder name: Nguyen Van A
+Country or region: Vietnam

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stripe Checkout - Đã hủy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/shared.css" />
+  <script src="https://cdn.jsdelivr.net/npm/axios@1/dist/axios.min.js"></script>
+  <script src="/js/api-client.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"></script>
+  <style>
+    .result-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .result-card {
+      width: min(560px, 100%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-xl);
+      padding: 32px;
+      box-shadow: var(--shadow);
+    }
+    .result-mark {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--warn-dim);
+      color: var(--warn);
+      font-weight: 800;
+      margin-bottom: 18px;
+    }
+    .result-mark img.emoji {
+      width: 26px;
+      height: 26px;
+    }
+    .result-card h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+    .result-card p {
+      color: var(--ink2);
+      margin-bottom: 18px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <main class="result-shell">
+    <section class="result-card">
+      <div class="result-mark emoji-icon">❌</div>
+      <h1>Thanh toán Stripe đã hủy</h1>
+      <p>Người dùng đã rời Stripe Checkout trước khi hoàn tất thanh toán.</p>
+      <p id="sync-status">Đang ghi nhận giao dịch thất bại...</p>
+      <div class="actions">
+        <a class="btn-primary" href="/create-order.html">Thử lại</a>
+        <a class="btn-ghost" href="/create-order.html">Xem lịch sử</a>
+      </div>
+    </section>
+  </main>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const txnRef = params.get('txnRef') || '';
+    const DRAFT_PREFIX = 'paymentDraft:';
+    const STRIPE_SESSION_PREFIX = 'stripeSession:';
+    const syncEl = document.getElementById('sync-status');
+
+    function renderEmojiIcons() {
+      if (!window.twemoji) return;
+      document.querySelectorAll('.emoji-icon').forEach((el) => {
+        window.twemoji.parse(el, { folder: 'svg', ext: '.svg' });
+      });
+    }
+
+    window.addEventListener('load', renderEmojiIcons);
+    renderEmojiIcons();
+
+    async function syncCancel() {
+      if (!txnRef) {
+        syncEl.textContent = 'Không tìm thấy mã giao dịch để ghi nhận hủy thanh toán.';
+        return;
+      }
+
+      const draft = JSON.parse(sessionStorage.getItem(DRAFT_PREFIX + txnRef) || 'null');
+      const sessionId = sessionStorage.getItem(STRIPE_SESSION_PREFIX + txnRef) || '';
+
+      try {
+        const { data } = await apiClient.post('/stripe/cancel', {
+          txnRef,
+          sessionId,
+          draft,
+        });
+
+        syncEl.textContent = `Đã ghi nhận giao dịch thất bại: ${data.txnRef || txnRef}`;
+      } catch (err) {
+        syncEl.textContent = `Không thể ghi nhận hủy thanh toán: ${getApiErrorMessage(err, 'Không thể ghi nhận hủy thanh toán.')}`;
+      }
+    }
+
+    syncCancel();
+  </script>
+</body>
+</html>

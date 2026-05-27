@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kết quả thanh toán - Sandbox thanh toán</title>
+  <meta name="description" content="Kết quả thanh toán VNPAY hoặc Stripe, kèm dữ liệu giao dịch từ MongoDB" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/shared.css" />
+  <link rel="stylesheet" href="/css/payment-result.css" />
+  <script src="https://cdn.jsdelivr.net/npm/axios@1/dist/axios.min.js"></script>
+  <script src="/js/api-client.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"></script>
+</head>
+<body>
+<div class="result-page" id="result-page">
+  <div class="result-card" id="result-card">
+    <div class="result-icon-wrap">
+      <div class="result-icon emoji-icon" id="result-icon">...</div>
+    </div>
+
+    <div class="result-heading">
+      <h1 class="result-title" id="result-title">Đang xử lý...</h1>
+      <p class="result-sub" id="result-sub">Đang lấy thông tin giao dịch</p>
+    </div>
+
+    <div class="detail-grid" id="detail-grid">
+      <div class="detail-item"><div class="detail-label">Mã GD</div><div class="skeleton" style="width:80%"></div></div>
+      <div class="detail-item"><div class="detail-label">Số tiền</div><div class="skeleton" style="width:60%"></div></div>
+      <div class="detail-item"><div class="detail-label">Phản hồi</div><div class="skeleton" style="width:40%"></div></div>
+      <div class="detail-item"><div class="detail-label">Xác thực</div><div class="skeleton" style="width:50%"></div></div>
+    </div>
+
+    <div class="db-section" id="db-section" style="display:none">
+      <div class="db-section-title">
+        <div class="db-dot"></div>
+        Dữ liệu từ MongoDB
+      </div>
+      <div id="db-rows"></div>
+    </div>
+
+    <div class="result-actions">
+      <a href="/create-order.html" class="btn-primary">Tạo đơn mới</a>
+      <a href="/create-order.html" class="btn-ghost">Xem lịch sử</a>
+    </div>
+  </div>
+</div>
+
+<script>
+function fmtMoney(amount, currency = 'vnd', fromStripeAmount = false) {
+  const normalizedCurrency = String(currency || 'vnd').toLowerCase();
+  const numericAmount = Number(amount || 0);
+
+  if (normalizedCurrency === 'usd') {
+    const displayAmount = fromStripeAmount ? numericAmount / 100 : numericAmount;
+    return displayAmount.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    });
+  }
+
+  return numericAmount.toLocaleString('vi-VN') + ' ₫';
+}
+
+function gatewayLabel(provider) {
+  return {
+    stripe: 'Stripe',
+    momo: 'MoMo',
+    vnpay: 'VNPAY',
+  }[provider] || 'VNPAY';
+}
+
+function isSuccessfulResponse(result) {
+  if (result.provider === 'stripe') return result.success;
+  if (result.provider === 'momo') return String(result.resultCode ?? result.responseCode) === '0';
+  return result.responseCode === '00';
+}
+
+function verificationLabel(provider) {
+  if (provider === 'stripe') return 'Stripe';
+  if (provider === 'momo') return 'Chữ ký MoMo';
+  return 'Chữ ký Return';
+}
+
+function verificationText(result) {
+  if (result.provider === 'stripe') return 'Đã xác nhận';
+  return result.verified ? 'Hợp lệ' : 'Không hợp lệ';
+}
+
+const fmtDate = iso => iso ? new Date(iso).toLocaleString('vi-VN') : '—';
+
+const p = new URLSearchParams(window.location.search);
+const txnRef = p.get('txnRef') || '';
+const urlSuccess = p.get('success') === '1';
+const urlVerified = p.get('verified') === '1';
+const responseCode = p.get('responseCode') || '?';
+const resultCode = p.get('resultCode') || responseCode;
+const txnStatus = p.get('txnStatus') || '?';
+const amount = p.get('amount') || '0';
+const fromHistory = p.get('fromHistory') === '1';
+const provider = p.get('provider') || 'vnpay';
+
+const page = document.getElementById('result-page');
+const card = document.getElementById('result-card');
+
+function renderEmojiIcon(el) {
+  if (!window.twemoji) return;
+
+  window.twemoji.parse(el, {
+    folder: 'svg',
+    ext: '.svg',
+  });
+}
+
+function renderGrid(result) {
+  const grid = document.getElementById('detail-grid');
+  const resultColor = result.success ? 'var(--brand)' : 'var(--danger)';
+  const resultText = result.success ? 'Thành công' : 'Thất bại';
+  const responseOk = isSuccessfulResponse(result);
+
+  grid.innerHTML = [
+    ['Mã giao dịch', `<span class="detail-value mono">${result.txnRef || '?'}</span>`],
+    ['Số tiền', `<span class="detail-value amount">${fmtMoney(result.amount, result.currency, result.provider === 'stripe')}</span>`],
+    ['Cổng thanh toán', `<span class="detail-value">${gatewayLabel(result.provider)}</span>`],
+    ['Mã phản hồi', `<span class="detail-value" style="color:${responseOk ? 'var(--brand)' : 'var(--danger)'}">${result.responseCode}</span>`],
+    ['Trạng thái GD', `<span class="detail-value" style="color:var(--ink2)">${result.txnStatus}</span>`],
+    [verificationLabel(result.provider), `<span class="detail-value" style="color:${result.verified ? 'var(--brand)' : 'var(--danger)'}">${verificationText(result)}</span>`],
+    ['Kết quả', `<span class="detail-value" style="color:${resultColor}">${resultText}</span>`],
+  ].map(([label, valueHtml]) => `
+    <div class="detail-item">
+      <div class="detail-label">${label}</div>
+      ${valueHtml}
+    </div>`).join('');
+}
+
+async function fetchDbRecord(ref) {
+  if (!ref) return null;
+  try {
+    const query = provider ? `?provider=${encodeURIComponent(provider)}` : '';
+    const { data: tx } = await apiClient.get(`/api/transactions/${encodeURIComponent(ref)}${query}`);
+
+    const dbSection = document.getElementById('db-section');
+    const dbRows = document.getElementById('db-rows');
+    dbSection.style.display = '';
+
+    dbRows.innerHTML = [
+      ['Cổng thanh toán', gatewayLabel(tx.provider), 'ok'],
+      ['Tiền tệ', String(tx.currency || 'vnd').toUpperCase(), ''],
+      ['Trạng thái', tx.status, tx.status === 'success' ? 'ok' : tx.status === 'failed' ? 'fail' : 'warn'],
+      ['IPN xác thực', tx.ipnVerified ? 'Xác thực thành công' : 'Chưa nhận IPN', tx.ipnVerified ? 'ok' : 'warn'],
+      ['IPN lúc', fmtDate(tx.ipnReceivedAt), ''],
+      ['Return xác thực', tx.returnVerified ? 'Hợp lệ' : 'Không hợp lệ', tx.returnVerified ? 'ok' : 'fail'],
+      ['Thanh toán lúc', fmtDate(tx.paidAt), 'ok'],
+      ['Tạo lúc', fmtDate(tx.createdAt), ''],
+      ['Địa chỉ IP', tx.ipAddr || '—', ''],
+      ['Lưu MongoDB', 'Có', 'ok'],
+    ].map(([key, val, cls]) => `
+      <div class="db-row">
+        <span class="db-key">${key}</span>
+        <span class="db-val ${cls}">${val}</span>
+      </div>`).join('');
+
+    return tx;
+  } catch {
+    return null;
+  }
+}
+
+function resultFromUrl() {
+  if (provider === 'momo') {
+    return {
+      txnRef,
+      amount,
+      currency: 'vnd',
+      responseCode: resultCode,
+      resultCode,
+      txnStatus,
+      verified: urlVerified,
+      success: urlSuccess,
+      state: urlSuccess ? 'success' : 'failed',
+      ipnVerified: urlSuccess,
+      provider: 'momo',
+    };
+  }
+
+  return {
+    txnRef,
+    amount,
+    currency: 'vnd',
+    responseCode,
+    txnStatus,
+    verified: urlVerified,
+    success: urlSuccess,
+    state: urlSuccess ? 'success' : 'failed',
+    ipnVerified: urlSuccess,
+    provider: 'vnpay',
+  };
+}
+
+function resultFromTransaction(tx) {
+  const success = tx.status === 'success';
+  let finalResponseCode = tx.vnpResponseCode || 'N/A';
+  let finalTxnStatus = tx.vnpTransactionStatus || tx.status || 'N/A';
+  let verified = Boolean(tx.returnVerified);
+
+  if (tx.provider === 'stripe') {
+    finalResponseCode = tx.paymentStatus || tx.status || 'N/A';
+    finalTxnStatus = tx.status || 'N/A';
+    verified = true;
+  } else if (tx.provider === 'momo') {
+    finalResponseCode = String(tx.resultCode ?? 'N/A');
+    finalTxnStatus = tx.message || tx.status || 'N/A';
+    verified = Boolean(tx.returnVerified || tx.ipnVerified);
+  }
+
+  return {
+    txnRef: tx.txnRef || txnRef,
+    amount: tx.amount ?? amount,
+    currency: tx.currency || 'vnd',
+    responseCode: finalResponseCode,
+    resultCode: tx.provider === 'momo' ? finalResponseCode : undefined,
+    txnStatus: finalTxnStatus,
+    verified,
+    success,
+    state: success ? 'success' : 'failed',
+    ipnVerified: tx.provider === 'stripe' ? true : Boolean(tx.ipnVerified),
+    provider: tx.provider,
+  };
+}
+
+function renderHeader(result) {
+  const icon = document.getElementById('result-icon');
+  const title = document.getElementById('result-title');
+  const sub = document.getElementById('result-sub');
+  const state = result.state;
+
+  icon.className = 'result-icon emoji-icon ' + (state === 'success' ? 'ok' : state === 'failed' ? 'fail' : '');
+  icon.textContent = state === 'success' ? '✅' : state === 'failed' ? '❌' : '⏳';
+  renderEmojiIcon(icon);
+  title.textContent = state === 'success'
+    ? 'Thanh toán thành công!'
+    : 'Thanh toán thất bại';
+  title.className = 'result-title ' + (state === 'success' ? 'ok' : state === 'failed' ? 'fail' : '');
+  sub.textContent = result.provider === 'stripe'
+    ? 'Stripe Checkout đã ghi nhận kết quả thanh toán'
+    : result.provider === 'momo'
+    ? 'MoMo đã gửi kết quả thanh toán về hệ thống'
+    : result.verified
+    ? 'Chữ ký VNPAY hợp lệ, dữ liệu toàn vẹn'
+    : 'Chữ ký không hợp lệ, cần kiểm tra lại';
+
+  page.classList.toggle('fail', state === 'failed');
+  card.classList.remove('success', 'fail');
+  if (state === 'success' || state === 'failed') {
+    card.classList.add(state);
+  }
+}
+
+window.addEventListener('load', () => {
+  document.querySelectorAll('.emoji-icon').forEach(renderEmojiIcon);
+});
+
+if (txnRef) {
+  (async () => {
+    const tx = await fetchDbRecord(txnRef);
+    const result = fromHistory && tx ? resultFromTransaction(tx) : resultFromUrl();
+
+    renderHeader(result);
+    renderGrid(result);
+  })();
+} else {
+  window.location.replace('/create-order.html');
+}
+</script>
+</body>
+</html>

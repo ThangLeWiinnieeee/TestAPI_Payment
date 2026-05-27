@@ -1,0 +1,243 @@
+/* ══════════════════════════════════════════════════════════════
+   result.css — Styles cho trang kết quả thanh toán (result.html)
+══════════════════════════════════════════════════════════════ */
+
+/* ─── Page layout ────────────────────────────────────────────── */
+.result-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ambient background blobs */
+.result-page::before,
+.result-page::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+.result-page::before {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(0,208,156,0.08), transparent 70%);
+  top: -200px;
+  right: -100px;
+}
+.result-page::after {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(124,111,247,0.07), transparent 70%);
+  bottom: -150px;
+  left: -100px;
+}
+
+.result-page.fail::before {
+  background: radial-gradient(circle, rgba(255,90,106,0.08), transparent 70%);
+}
+
+/* ─── Result card ────────────────────────────────────────────── */
+.result-card {
+  width: min(640px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 44px 40px 36px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  position: relative;
+  z-index: 1;
+  animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Success tinted top border */
+.result-card.success { border-top: 3px solid var(--brand); }
+.result-card.fail { border-top: 3px solid var(--danger); }
+
+/* ─── Status icon ────────────────────────────────────────────── */
+.result-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 36px;
+  font-weight: 700;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+.result-icon img.emoji {
+  width: 42px;
+  height: 42px;
+}
+.result-icon.ok {
+  background: var(--brand-dim);
+  color: var(--brand);
+  border: 2px solid var(--brand);
+  animation: pulseGlow 2.5s ease-in-out infinite;
+}
+.result-icon.fail {
+  background: var(--danger-dim);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+}
+
+/* Ripple ring behind icon */
+.result-icon-wrap::before {
+  content: '';
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 1px solid var(--brand);
+  opacity: 0.25;
+  animation: ripple 2s ease-out infinite;
+}
+.result-page.fail .result-icon-wrap::before { border-color: var(--danger); }
+
+@keyframes ripple {
+  0% { transform: scale(0.85); opacity: 0.25; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+/* ─── Title area ─────────────────────────────────────────────── */
+.result-heading { text-align: center; }
+.result-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  margin-bottom: 6px;
+}
+.result-title.ok { color: var(--brand); }
+.result-title.fail { color: var(--danger); }
+
+.result-sub {
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+/* ─── Detail grid ────────────────────────────────────────────── */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+.detail-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 13px 15px;
+}
+.detail-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+.detail-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  word-break: break-all;
+}
+.detail-value.mono { font-family: var(--mono); font-size: 12px; color: var(--brand); }
+.detail-value.amount {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--brand);
+}
+
+/* ─── DB record section ──────────────────────────────────────── */
+.db-section {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.db-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.db-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand);
+  animation: pulseDot 2s ease-in-out infinite;
+}
+@keyframes pulseDot { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+.db-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.db-row:last-child { border-bottom: none; }
+.db-key { color: var(--muted); flex-shrink: 0; }
+.db-val { font-weight: 600; text-align: right; word-break: break-all; }
+.db-val.ok { color: var(--brand); }
+.db-val.fail { color: var(--danger); }
+.db-val.warn { color: var(--warn); }
+
+/* ─── Action buttons ─────────────────────────────────────────── */
+.result-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+.result-actions .btn-primary { flex: 1; }
+.result-actions .btn-ghost { flex: 0 0 auto; }
+
+/* ─── Loading skeleton ───────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--r-sm);
+  height: 16px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ─── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .result-card { padding: 32px 20px 28px; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .result-actions { flex-direction: column; }
+  .result-title { font-size: 22px; }
+}

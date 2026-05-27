@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tạo đơn hàng - Sandbox thanh toán</title>
+  <meta name="description" content="Tạo đơn hàng và chọn phương thức thanh toán sandbox" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/shared.css" />
+  <link rel="stylesheet" href="/css/create-order.css" />
+  <script src="https://cdn.jsdelivr.net/npm/axios@1/dist/axios.min.js"></script>
+  <script src="/js/api-client.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">₫</div>
+      <div>
+        <div class="logo-name">Thanh toán</div>
+        <div class="logo-sub">Kiểm thử sandbox</div>
+      </div>
+    </div>
+
+    <div id="status-badge" class="status-badge checking">Đang kiểm tra...</div>
+
+    <div class="sidebar-section">
+      <div class="section-label">VNPAY test ATM</div>
+      <div class="test-card">
+        <div class="tc-row"><span>Số thẻ</span><code>9704198526191432198</code></div>
+        <div class="tc-row"><span>Ngày HH</span><code>07/15</code></div>
+        <div class="tc-row"><span>Tên</span><code>NGUYEN VAN A</code></div>
+        <div class="tc-row"><span>OTP</span><code>123456</code></div>
+      </div>
+      <button class="btn-copy" id="copy-btn" onclick="copyCard()">Sao chép số thẻ</button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Số tiền nhanh</div>
+      <div class="qa-grid">
+        <button class="qa" onclick="setAmount(10000)">10K</button>
+        <button class="qa" onclick="setAmount(50000)">50K</button>
+        <button class="qa" onclick="setAmount(100000)">100K</button>
+        <button class="qa" onclick="setAmount(500000)">500K</button>
+        <button class="qa" onclick="setAmount(1000000)">1M</button>
+        <button class="qa" onclick="setAmount(5000000)">5M</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1>Kiểm thử thanh toán</h1>
+      <p class="topbar-sub">Tạo đơn trước, sau đó chọn cổng thanh toán phù hợp.</p>
+    </header>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-tag">Đơn hàng</div>
+        <h2 class="card-title">Tạo đơn hàng</h2>
+        <p class="card-desc">Điền thông tin đơn hàng rồi chuyển sang trang chọn cổng thanh toán.</p>
+      </div>
+
+      <form id="pay-form">
+        <div class="form-row two-col">
+          <div class="field">
+            <label for="amount" id="amount-label">Số tiền (VND)</label>
+            <div class="input-wrap">
+              <span class="input-prefix" id="amount-prefix">₫</span>
+              <input id="amount" name="amount" type="number" min="1000" step="1000" value="100000" required />
+            </div>
+          </div>
+          <div class="field">
+            <label for="orderInfo">Mô tả đơn hàng</label>
+            <input id="orderInfo" name="orderInfo" type="text" value="Thanh toán đơn hàng #001" />
+          </div>
+        </div>
+        <div class="form-row two-col">
+          <div class="field">
+            <label for="orderType">Loại đơn hàng</label>
+            <select id="orderType" name="orderType">
+              <option value="other">Khác</option>
+              <option value="billpayment">Thanh toán hóa đơn</option>
+              <option value="topup">Nạp tiền</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="currency">Đơn vị tiền tệ</label>
+            <select id="currency" name="currency" onchange="updateCurrencyUi()">
+              <option value="vnd">VND - Thanh toán nội địa</option>
+              <option value="usd">USD - Stripe quốc tế</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" id="pay-btn" class="btn-submit">
+          <span id="btn-text">Tạo đơn và chọn thanh toán</span>
+          <span id="btn-spinner" class="spinner hidden"></span>
+        </button>
+        <div class="error-msg" id="error-msg"></div>
+      </form>
+
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <div class="card-tag">Webhook</div>
+        <h2 class="card-title">IPN Webhook</h2>
+        <p class="card-desc">VNPAY gọi server-to-server để xác nhận thanh toán trước khi redirect người dùng về.</p>
+      </div>
+      <div class="ipn-endpoint">
+        <div class="endpoint-row">
+          <span class="method get">GET</span>
+          <code>/payment/ipn</code>
+        </div>
+        <p class="ipn-note">Lưu ý: Với <strong>localhost</strong>, VNPAY không thể gọi IPN vì server chưa có public URL. Dùng <strong>ngrok</strong> để expose local server, sau đó cập nhật <code>VNP_RETURN_URL</code> trong <strong>.env</strong>.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header-row">
+        <div>
+          <div class="card-tag">MongoDB</div>
+          <h2 class="card-title">Lịch sử giao dịch</h2>
+        </div>
+        <div class="history-controls">
+          <select id="filter-status" onchange="applyFilter()" class="filter-select">
+            <option value="">Tất cả</option>
+            <option value="success">Thành công</option>
+            <option value="failed">Thất bại</option>
+          </select>
+          <button class="btn-icon" onclick="loadHistory()" title="Làm mới">↻</button>
+        </div>
+      </div>
+
+      <div id="history-list" class="history-list">
+        <div class="history-empty">Đang tải giao dịch đã hoàn tất...</div>
+      </div>
+
+      <div id="pagination" class="pagination hidden">
+        <button id="pg-prev" class="pg-btn" onclick="changePage(-1)">← Trước</button>
+        <span id="pg-info" class="pg-info"></span>
+        <button id="pg-next" class="pg-btn" onclick="changePage(1)">Sau →</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+let currentPage = 1;
+const PAGE_SIZE = 10;
+const DRAFT_PREFIX = 'paymentDraft:';
+const LAST_DRAFT_KEY = 'paymentDraft:last';
+
+function fmtMoney(amount, currency = 'vnd', fromStripeAmount = false) {
+  const normalizedCurrency = String(currency || 'vnd').toLowerCase();
+  const numericAmount = Number(amount || 0);
+
+  if (normalizedCurrency === 'usd') {
+    const displayAmount = fromStripeAmount ? numericAmount / 100 : numericAmount;
+    return displayAmount.toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    });
+  }
+
+  return numericAmount.toLocaleString('vi-VN') + ' ₫';
+}
+
+function gatewayLabel(provider) {
+  return {
+    stripe: 'Stripe',
+    momo: 'MoMo',
+    vnpay: 'VNPAY',
+  }[provider] || 'VNPAY';
+}
+
+const fmtDate = iso => iso ? new Date(iso).toLocaleString('vi-VN') : '—';
+
+function statusLabel(s) {
+  return {
+    success: { text: 'Thành công', cls: 'success' },
+    failed: { text: 'Thất bại', cls: 'failed' },
+  }[s] || { text: s, cls: '' };
+}
+
+function saveDraft(order) {
+  sessionStorage.setItem(DRAFT_PREFIX + order.txnRef, JSON.stringify(order));
+  sessionStorage.setItem(LAST_DRAFT_KEY, order.txnRef);
+}
+
+function restoreLastDraft() {
+  const lastTxnRef = sessionStorage.getItem(LAST_DRAFT_KEY);
+  if (!lastTxnRef) return;
+
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(DRAFT_PREFIX + lastTxnRef) || 'null');
+    if (!draft) return;
+
+    form.amount.value = draft.amount || form.amount.value;
+    form.orderInfo.value = draft.orderInfo || form.orderInfo.value;
+    form.orderType.value = draft.orderType || form.orderType.value;
+    form.currency.value = draft.currency || form.currency.value;
+    updateCurrencyUi(false);
+  } catch {
+    sessionStorage.removeItem(LAST_DRAFT_KEY);
+  }
+}
+
+function setAmount(v) {
+  document.getElementById('amount').value = v;
+  document.getElementById('amount').focus();
+}
+
+function updateCurrencyUi(resetAmount = true) {
+  const currency = form.currency.value;
+  const amountInput = document.getElementById('amount');
+  const amountLabel = document.getElementById('amount-label');
+  const amountPrefix = document.getElementById('amount-prefix');
+
+  amountLabel.textContent = `Số tiền (${currency.toUpperCase()})`;
+  amountPrefix.textContent = currency === 'usd' ? '$' : '₫';
+  amountInput.min = currency === 'usd' ? '0.5' : '1000';
+  amountInput.step = currency === 'usd' ? '0.01' : '1000';
+
+  if (resetAmount) {
+    amountInput.value = currency === 'usd' ? '10.00' : '100000';
+  }
+}
+
+function copyCard() {
+  navigator.clipboard.writeText('9704198526191432198').then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'Đã sao chép!';
+    setTimeout(() => { btn.textContent = 'Sao chép số thẻ'; }, 2000);
+  });
+}
+
+async function checkHealth() {
+  const badge = document.getElementById('status-badge');
+  try {
+    const { data: d } = await apiClient.get('/api/health');
+    const readyCount = [d.configured, d.stripeConfigured, d.momoConfigured].filter(Boolean).length;
+    badge.textContent = readyCount ? `${readyCount} cổng sẵn sàng` : 'Thiếu config .env';
+    badge.className = 'status-badge ' + (readyCount ? 'ok' : 'warn');
+  } catch {
+    badge.textContent = 'Server offline';
+    badge.className = 'status-badge error';
+  }
+}
+
+const form = document.getElementById('pay-form');
+const errorEl = document.getElementById('error-msg');
+const payBtn = document.getElementById('pay-btn');
+const btnText = document.getElementById('btn-text');
+const spinner = document.getElementById('btn-spinner');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errorEl.textContent = '';
+  payBtn.disabled = true;
+  btnText.classList.add('hidden');
+  spinner.classList.remove('hidden');
+
+  try {
+    const { data } = await apiClient.post('/api/orders', {
+      amount: form.amount.value,
+      currency: form.currency.value,
+      orderInfo: form.orderInfo.value,
+      orderType: form.orderType.value,
+    });
+    saveDraft(data);
+
+    setTimeout(() => {
+      window.location.href = `/payment-method.html?txnRef=${encodeURIComponent(data.txnRef)}`;
+    }, 250);
+  } catch (err) {
+    errorEl.textContent = getApiErrorMessage(err, 'Tạo đơn thất bại');
+    payBtn.disabled = false;
+    btnText.classList.remove('hidden');
+    spinner.classList.add('hidden');
+  }
+});
+
+async function loadHistory() {
+  const list = document.getElementById('history-list');
+  const status = document.getElementById('filter-status').value;
+  const params = new URLSearchParams({ page: currentPage, limit: PAGE_SIZE });
+  if (status) params.set('status', status);
+
+  try {
+    const { data: payload } = await apiClient.get('/api/transactions', { params });
+    const { data, total, page, limit } = payload;
+
+    if (!data.length) {
+      list.innerHTML = '<div class="history-empty">Chưa có giao dịch thành công hoặc thất bại.</div>';
+      document.getElementById('pagination').classList.add('hidden');
+      return;
+    }
+
+    list.innerHTML = data.map(tx => {
+      const sl = statusLabel(tx.status);
+      return `
+        <div class="txn-row" onclick="window.location='/payment-result.html?txnRef=${tx.txnRef}&fromHistory=1&provider=${tx.provider}'">
+          <div class="txn-left">
+            <code class="txn-ref">${tx.txnRef}</code>
+            <span class="txn-info">${tx.orderInfo || '—'}</span>
+          </div>
+          <div class="txn-right">
+            <span class="txn-provider">${gatewayLabel(tx.provider)}</span>
+            <span class="txn-amount">${fmtMoney(tx.amount, tx.currency, tx.provider === 'stripe')}</span>
+            <span class="txn-status ${sl.cls}">${sl.text}</span>
+            <span class="txn-date">${fmtDate(tx.createdAt)}</span>
+            <div class="txn-badges">
+              ${tx.ipnVerified ? '<span class="badge-ipn">IPN</span>' : ''}
+              ${tx.returnVerified ? '<span class="badge-ret">Return</span>' : ''}
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    const totalPages = Math.ceil(total / limit);
+    const pgEl = document.getElementById('pagination');
+    pgEl.classList.toggle('hidden', totalPages <= 1);
+    document.getElementById('pg-info').textContent = `Trang ${page} / ${totalPages} (${total} GD)`;
+    document.getElementById('pg-prev').disabled = page <= 1;
+    document.getElementById('pg-next').disabled = page >= totalPages;
+  } catch (err) {
+    list.innerHTML = `<div class="history-empty" style="color:var(--danger)">Lỗi: ${getApiErrorMessage(err)}</div>`;
+  }
+}
+
+function applyFilter() { currentPage = 1; loadHistory(); }
+function changePage(d) { currentPage += d; if (currentPage < 1) currentPage = 1; loadHistory(); }
+
+checkHealth();
+restoreLastDraft();
+updateCurrencyUi(false);
+loadHistory();
+setInterval(loadHistory, 8000);
+</script>
+</body>
+</html>
