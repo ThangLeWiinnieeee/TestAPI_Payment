@@ -104,20 +104,6 @@
 
     </section>
 
-    <section class="card">
-      <div class="card-header">
-        <div class="card-tag">Webhook</div>
-        <h2 class="card-title">IPN Webhook</h2>
-        <p class="card-desc">VNPAY gọi server-to-server để xác nhận thanh toán trước khi redirect người dùng về.</p>
-      </div>
-      <div class="ipn-endpoint">
-        <div class="endpoint-row">
-          <span class="method get">GET</span>
-          <code>/payment/ipn</code>
-        </div>
-        <p class="ipn-note">Lưu ý: Với <strong>localhost</strong>, VNPAY không thể gọi IPN vì server chưa có public URL. Dùng <strong>ngrok</strong> để expose local server, sau đó cập nhật <code>VNP_RETURN_URL</code> trong <strong>.env</strong>.</p>
-      </div>
-    </section>
 
     <section class="card">
       <div class="card-header-row">
@@ -313,10 +299,7 @@ async function loadHistory() {
             <span class="txn-amount">${fmtMoney(tx.amount, tx.currency, tx.provider === 'stripe')}</span>
             <span class="txn-status ${sl.cls}">${sl.text}</span>
             <span class="txn-date">${fmtDate(tx.createdAt)}</span>
-            <div class="txn-badges">
-              ${tx.ipnVerified ? '<span class="badge-ipn">IPN</span>' : ''}
-              ${tx.returnVerified ? '<span class="badge-ret">Return</span>' : ''}
-            </div>
+
           </div>
         </div>`;
     }).join('');
