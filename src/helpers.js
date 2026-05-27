@@ -135,7 +135,7 @@ function toStripeUnitAmount(value, currency) {
  * @returns {string}
  */
 function generateTxnRef() {
-  const date = moment().format('YYYYMMDD');
+  const date = moment().utcOffset('+07:00').format('YYYYMMDD');
   const rand = crypto.randomBytes(4).toString('hex').toUpperCase();
   return `${date}${rand}`;
 }

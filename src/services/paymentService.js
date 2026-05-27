@@ -71,9 +71,10 @@ async function createPaymentUrl({ body, headers, socket, ip }) {
   }
 
   const amount = Math.round(amountInput * 100);
-  const date = moment().format('YYYYMMDDHHmmss');
-  const expireDate = moment().add(15, 'minutes').format('YYYYMMDDHHmmss');
-  const orderInfo = normalizeOrderInfo(existingOrder ? existingOrder.orderInfo : body.orderInfo);
+  const nowVN      = moment().utcOffset('+07:00');
+  const date       = nowVN.format('YYYYMMDDHHmmss');
+  const expireDate = nowVN.clone().add(15, 'minutes').format('YYYYMMDDHHmmss');
+  const orderInfo  = normalizeOrderInfo(existingOrder ? existingOrder.orderInfo : body.orderInfo);
   const txnRef = existingOrder ? existingOrder.txnRef : generateTxnRef();
   const orderType = (existingOrder ? existingOrder.orderType : body.orderType || 'other').toString();
   const ipAddr = existingOrder
