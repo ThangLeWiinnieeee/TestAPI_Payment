@@ -250,21 +250,27 @@ async function confirmIpn(body, reqInfo = {}) {
 async function buildReturnRedirect(query, reqInfo = {}) {
   const payload = getResultPayload(query);
   const orderId = payload.orderId || 'unknown';
-  const resultCode = valueOf(payload.resultCode || 'unknown');
-  const amount = valueOf(payload.amount || 0);
+  const resultCode = payload.resultCode === undefined || payload.resultCode === null
+    ? 'unknown'
+    : valueOf(payload.resultCode);
+  const amount = payload.amount === undefined || payload.amount === null
+    ? '0'
+    : valueOf(payload.amount);
+  let stored = false;
 
   // Chỉ verify chữ ký nếu MoMo đã được cấu hình, còn không thì verified = false
   const verified = isMomoConfigured() && payload.orderId
     ? verifyMomoResult(payload)
     : false;
-  const success = verified && resultCode === '0';
+  const success = verified && Number(resultCode) === 0;
 
   if (payload.orderId) {
     try {
-      await momoStore.updateFromReturn(payload, {
+      const payment = await momoStore.updateFromReturn(payload, {
         verified,
         ipAddr: normalizeIp(getRawIp(reqInfo)),
       });
+      stored = Boolean(payment);
     } catch (error) {
       console.error('MoMo return store error:', error.message);
     }
@@ -279,6 +285,7 @@ async function buildReturnRedirect(query, reqInfo = {}) {
     txnStatus: payload.message || resultCode,
     amount,
     verified: verified ? '1' : '0',
+    stored: stored ? '1' : '0',
     success: success ? '1' : '0',
   });
 

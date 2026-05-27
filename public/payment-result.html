@@ -99,8 +99,8 @@ const responseCode = p.get('responseCode') || '?';
 const resultCode = p.get('resultCode') || responseCode;
 const txnStatus = p.get('txnStatus') || '?';
 const amount = p.get('amount') || '0';
-const fromHistory = p.get('fromHistory') === '1';
 const provider = p.get('provider') || 'vnpay';
+const urlStored = p.get('stored') === '1';
 
 const page = document.getElementById('result-page');
 const card = document.getElementById('result-card');
@@ -143,16 +143,23 @@ async function fetchDbRecord(ref) {
 
     const dbSection = document.getElementById('db-section');
     const dbRows = document.getElementById('db-rows');
+    const momoRows = tx.provider === 'momo'
+      ? [
+        ['Mã MoMo', String(tx.resultCode ?? 'N/A'), tx.status === 'success' ? 'ok' : 'fail'],
+        ['Thông điệp MoMo', tx.message || '—', tx.status === 'success' ? 'ok' : 'fail'],
+      ]
+      : [];
     dbSection.style.display = '';
 
     dbRows.innerHTML = [
       ['Cổng thanh toán', gatewayLabel(tx.provider), 'ok'],
       ['Tiền tệ', String(tx.currency || 'vnd').toUpperCase(), ''],
       ['Trạng thái', tx.status, tx.status === 'success' ? 'ok' : tx.status === 'failed' ? 'fail' : 'warn'],
+      ...momoRows,
       ['IPN xác thực', tx.ipnVerified ? 'Xác thực thành công' : 'Chưa nhận IPN', tx.ipnVerified ? 'ok' : 'warn'],
       ['IPN lúc', fmtDate(tx.ipnReceivedAt), ''],
       ['Return xác thực', tx.returnVerified ? 'Hợp lệ' : 'Không hợp lệ', tx.returnVerified ? 'ok' : 'fail'],
-      ['Thanh toán lúc', fmtDate(tx.paidAt), 'ok'],
+      ['Thanh toán lúc', fmtDate(tx.paidAt), tx.paidAt ? 'ok' : ''],
       ['Tạo lúc', fmtDate(tx.createdAt), ''],
       ['Địa chỉ IP', tx.ipAddr || '—', ''],
       ['Lưu MongoDB', 'Có', 'ok'],
@@ -182,6 +189,7 @@ function resultFromUrl() {
       state: urlSuccess ? 'success' : 'failed',
       ipnVerified: urlSuccess,
       provider: 'momo',
+      dbSaved: urlStored,
     };
   }
 
@@ -196,6 +204,7 @@ function resultFromUrl() {
     state: urlSuccess ? 'success' : 'failed',
     ipnVerified: urlSuccess,
     provider: 'vnpay',
+    dbSaved: urlStored,
   };
 }
 
@@ -227,7 +236,30 @@ function resultFromTransaction(tx) {
     state: success ? 'success' : 'failed',
     ipnVerified: tx.provider === 'stripe' ? true : Boolean(tx.ipnVerified),
     provider: tx.provider,
+    dbSaved: true,
   };
+}
+
+function resultSubtitle(result) {
+  if (result.provider === 'stripe') {
+    return 'Stripe Checkout đã ghi nhận kết quả thanh toán';
+  }
+
+  if (result.provider === 'momo') {
+    if (result.state === 'failed') {
+      return result.dbSaved
+        ? 'MoMo trả về thanh toán thất bại; hệ thống đã lưu kết quả vào MongoDB'
+        : 'MoMo trả về thanh toán thất bại; chưa đọc được bản ghi MongoDB';
+    }
+
+    return result.dbSaved
+      ? 'MoMo đã gửi kết quả thanh toán về hệ thống và đã lưu vào MongoDB'
+      : 'MoMo đã gửi kết quả thanh toán về hệ thống';
+  }
+
+  return result.verified
+    ? 'Chữ ký VNPAY hợp lệ, dữ liệu toàn vẹn'
+    : 'Chữ ký không hợp lệ, cần kiểm tra lại';
 }
 
 function renderHeader(result) {
@@ -243,13 +275,7 @@ function renderHeader(result) {
     ? 'Thanh toán thành công!'
     : 'Thanh toán thất bại';
   title.className = 'result-title ' + (state === 'success' ? 'ok' : state === 'failed' ? 'fail' : '');
-  sub.textContent = result.provider === 'stripe'
-    ? 'Stripe Checkout đã ghi nhận kết quả thanh toán'
-    : result.provider === 'momo'
-    ? 'MoMo đã gửi kết quả thanh toán về hệ thống'
-    : result.verified
-    ? 'Chữ ký VNPAY hợp lệ, dữ liệu toàn vẹn'
-    : 'Chữ ký không hợp lệ, cần kiểm tra lại';
+  sub.textContent = resultSubtitle(result);
 
   page.classList.toggle('fail', state === 'failed');
   card.classList.remove('success', 'fail');
@@ -265,7 +291,7 @@ window.addEventListener('load', () => {
 if (txnRef) {
   (async () => {
     const tx = await fetchDbRecord(txnRef);
-    const result = fromHistory && tx ? resultFromTransaction(tx) : resultFromUrl();
+    const result = tx ? resultFromTransaction(tx) : resultFromUrl();
 
     renderHeader(result);
     renderGrid(result);
