@@ -9,7 +9,8 @@ const { MONGODB_URI } = require('./index');
  */
 async function connectDB() {
   mongoose.connection.on('connected', () => {
-    console.log(`MongoDB connected → ${MONGODB_URI}`);
+    const safeUri = MONGODB_URI.replace(/:([^@]+)@/, ':****@');
+    console.log(`MongoDB connected → ${safeUri}`);
   });
   mongoose.connection.on('error', (err) => {
     console.error('MongoDB error:', err.message);
@@ -19,7 +20,7 @@ async function connectDB() {
   });
 
   await mongoose.connect(MONGODB_URI, {
-    serverSelectionTimeoutMS: 5000,
+    serverSelectionTimeoutMS: 10000,
   });
 }
 

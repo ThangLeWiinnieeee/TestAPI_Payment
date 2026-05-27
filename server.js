@@ -36,7 +36,11 @@ app.use(async (req, res, next) => {
     await ensureDb();
     return next();
   } catch (err) {
-    return next(err);
+    console.error('[DB] Connection failed:', err.message);
+    return res.status(503).json({
+      error: 'Database unavailable',
+      message: err.message,
+    });
   }
 });
 
