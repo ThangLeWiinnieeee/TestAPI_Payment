@@ -3,3 +3,14 @@ node_modules/
 
 # Environment and secrets
 .env
+.env.*
+!.env.example
+
+# Local credential notes
+Docs/MongodbAslat_payment.txt
+Docs/*Mongo*Atlas*.txt
+Docs/*Mongo*Aslat*.txt
+Docs/*mongo*atlas*.txt
+Docs/*mongo*aslat*.txt
+Docs/*credential*.txt
+Docs/*secret*.txt

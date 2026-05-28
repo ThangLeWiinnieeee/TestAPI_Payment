@@ -90,7 +90,7 @@
             <label for="currency">Đơn vị tiền tệ</label>
             <select id="currency" name="currency" onchange="updateCurrencyUi()">
               <option value="vnd">VND - Thanh toán nội địa</option>
-              <option value="usd">USD - Stripe quốc tế</option>
+              <option value="usd">USD - Stripe/PayPal quốc tế</option>
             </select>
           </div>
         </div>
@@ -159,6 +159,7 @@ function gatewayLabel(provider) {
   return {
     stripe: 'Stripe',
     momo: 'MoMo',
+    paypal: 'PayPal',
     vnpay: 'VNPAY',
   }[provider] || 'VNPAY';
 }
@@ -228,7 +229,12 @@ async function checkHealth() {
   const badge = document.getElementById('status-badge');
   try {
     const { data: d } = await apiClient.get('/api/health');
-    const readyCount = [d.configured, d.stripeConfigured, d.momoConfigured].filter(Boolean).length;
+    const readyCount = [
+      d.configured,
+      d.stripeConfigured,
+      d.momoConfigured,
+      d.paypalConfigured,
+    ].filter(Boolean).length;
     badge.textContent = readyCount ? `${readyCount} cổng sẵn sàng` : 'Thiếu config .env';
     badge.className = 'status-badge ' + (readyCount ? 'ok' : 'warn');
   } catch {

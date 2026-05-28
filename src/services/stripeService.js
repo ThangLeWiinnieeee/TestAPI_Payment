@@ -19,6 +19,8 @@ const {
 } = require('../helpers');
 const vnpayStore = require('../stores/vnpayStore');
 const stripeStore = require('../stores/stripeStore');
+const momoStore = require('../stores/momoStore');
+const paypalStore = require('../stores/paypalStore');
 
 const PRODUCTS = {
   coffee: {
@@ -249,6 +251,19 @@ async function createCheckoutSession({ body, headers, socket, ip }) {
     const existingStripePayment = await stripeStore.findByRef(txnRef);
     if (existingStripePayment?.status === 'success') {
       throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng Stripe.');
+    }
+
+    const [existingMomoPayment, existingPaypalPayment] = await Promise.all([
+      momoStore.findByRef(txnRef),
+      paypalStore.findByRef(txnRef),
+    ]);
+
+    if (existingMomoPayment?.status === 'success') {
+      throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng MoMo.');
+    }
+
+    if (existingPaypalPayment?.status === 'success') {
+      throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng PayPal.');
     }
 
     currency = normalizeCurrency(order.currency || currency);

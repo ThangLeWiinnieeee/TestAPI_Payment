@@ -4,7 +4,7 @@ Tai lieu ngan gon ve cau truc, luong xu ly va quy uoc sua code.
 
 ## 1. Tong quan
 
-- Node.js + Express demo thanh toan VNPAY, Stripe Checkout va MoMo.
+- Node.js + Express demo thanh toan VNPAY, Stripe Checkout, MoMo va PayPal Checkout.
 - Entry point: `server.js`.
 - Backend: `src/`.
 - Frontend static: `public/`.
@@ -12,7 +12,7 @@ Tai lieu ngan gon ve cau truc, luong xu ly va quy uoc sua code.
 - Project chi luu giao dich cuoi cung: `success` hoac `failed`.
 - Khong luu draft order, `pending`, `checkout_created` vao MongoDB.
 - Draft order co `currency`: `vnd` hoac `usd`.
-- VNPAY va MoMo chi thanh toan `vnd`; Stripe co the thanh toan `vnd` hoac `usd`.
+- VNPAY va MoMo chi thanh toan `vnd`; Stripe co the thanh toan `vnd` hoac `usd`; PayPal mac dinh thanh toan `usd`.
 
 ## 2. Lenh chay
 
@@ -36,6 +36,7 @@ Can file `.env` voi cac bien:
 - Stripe redirect: `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`
 - MoMo: `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`
 - MoMo URL: `MOMO_CREATE_URL`, `MOMO_REDIRECT_URL`, `MOMO_IPN_URL`
+- PayPal: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_ENV`, `PAYPAL_CURRENCY`
 
 Khong commit secret that len public repo.
 
@@ -54,7 +55,7 @@ API_VNPAY/
   public/
     index.html # Trang redirect mac dinh sang tao don
     create-order.html # Form tao draft order va hien lich su giao dich
-      payment-method.html # Trang chon gateway VNPAY, Stripe hoac MoMo
+      payment-method.html # Trang chon gateway VNPAY, Stripe, MoMo hoac PayPal
     payment-result.html # Trang hien ket qua VNPAY va lich su chi tiet
     stripe-success.html # Trang Stripe success va sync session ve server
     stripe-cancel.html # Trang Stripe cancel khi user huy checkout
@@ -68,20 +69,24 @@ API_VNPAY/
       index.js # Doc config VNPAY, MongoDB va port tu .env
       db.js # Tao ket noi MongoDB bang Mongoose
       stripe.js # Doc Stripe config va tao Stripe client khi can
+      paypal.js # Doc PayPal config sandbox/live
     models/
       vnpay.js # Schema/model luu ket qua VNPAY/local gateway
       StripePayment.js # Schema/model luu ket qua Stripe Checkout
       MomoPayment.js # Schema/model luu ket qua MoMo
+      PaypalPayment.js # Schema/model luu ket qua PayPal Checkout
     routes/
-      index.js # Dang ky cac router /api, /payment, /stripe, /momo
+      index.js # Dang ky cac router /api, /payment, /stripe, /momo, /paypal
       api.js # API health, draft order co currency va lich su giao dich
       payment.js # Route tao URL, IPN va return cho VNPAY
       stripe.js # Route Checkout, webhook va sync cho Stripe
       momo.js # Route tao URL, IPN va return cho MoMo
+      paypal.js # Route config, create order, capture va cancel PayPal
     stores/
       vnpayStore.js # Data access cho model VNPAY
       stripeStore.js # Data access cho model StripePayment
       momoStore.js # Data access cho model MomoPayment
+      paypalStore.js # Data access cho model PaypalPayment
     helpers.js # Ham tien ich: sign, sort params, normalize, currency, tao txnRef
 ```
 
@@ -103,6 +108,7 @@ API_VNPAY/
 - `src/config/index.js`: port, VNPAY, MongoDB.
 - `src/config/db.js`: Mongoose connection.
 - `src/config/stripe.js`: Stripe config va lazy client.
+- `src/config/paypal.js`: PayPal config, endpoint sandbox/live va currency.
 
 ## 7. Models
 
@@ -127,6 +133,13 @@ API_VNPAY/
   - Currency mac dinh: `vnd`.
   - Luu raw IPN/Return va thong tin verify chu ky MoMo.
 
+- `src/models/PaypalPayment.js`
+  - Luu ket qua PayPal Checkout.
+  - Mongoose model: `PaypalPayment`.
+  - Status: `success`, `failed`.
+  - Currency mac dinh theo `PAYPAL_CURRENCY`, thuong la `usd`.
+  - Luu PayPal order, capture, payer va raw response.
+
 ## 8. Stores
 
 - `src/stores/vnpayStore.js`
@@ -144,14 +157,19 @@ API_VNPAY/
   - `findByRef`, `listAll`, `updateFromIpn`, `updateFromReturn`.
   - Chi IPN/Return moi ghi DB.
 
+- `src/stores/paypalStore.js`
+  - Store cho `PaypalPayment`.
+  - `findByRef`, `listAll`, `updateAfterCapture`, `updateCancelled`.
+  - Chi capture/cancel moi ghi DB.
+
 ## 9. Routes
 
-- `src/routes/index.js`: mount `/api`, `/payment`, `/stripe`.
+- `src/routes/index.js`: mount `/api`, `/payment`, `/stripe`, `/momo`, `/paypal`.
 
 - `src/routes/api.js`
   - `GET /api/health`: health/config check.
   - `POST /api/orders`: tao draft order voi `currency`, khong ghi DB.
-  - `GET /api/transactions`: gop lich su VNPAY + Stripe + MoMo, tra `provider`.
+  - `GET /api/transactions`: gop lich su VNPAY + Stripe + MoMo + PayPal, tra `provider`.
   - `GET /api/transactions/:txnRef`: tim theo ma giao dich, tra `provider`.
 
 - `src/routes/payment.js`
@@ -175,11 +193,18 @@ API_VNPAY/
   - `GET /momo/return`: MoMo browser return.
   - Chi IPN/Return moi ghi DB.
 
+- `src/routes/paypal.js`
+  - `GET /paypal/config`: tra PayPal client id public va currency cho JS SDK.
+  - `GET /paypal/payments/:txnRef`: xem ban ghi PayPal.
+  - `POST /paypal/orders`: tao PayPal order, chua ghi DB.
+  - `POST /paypal/orders/:orderId/capture`: capture PayPal order va ghi DB.
+  - `POST /paypal/cancel`: ghi nhan user huy PayPal thanh `failed`.
+
 ## 10. Frontend
 
 - `public/index.html`: redirect sang `create-order.html`.
 - `public/create-order.html`: tao draft co currency, luu `sessionStorage`, hien lich su.
-- `public/payment-method.html`: doc draft, chon VNPAY/Stripe/MoMo, chan VNPAY va MoMo neu `currency=usd`.
+- `public/payment-method.html`: doc draft, chon VNPAY/Stripe/MoMo/PayPal, render PayPal Buttons, chan VNPAY va MoMo neu `currency=usd`, chan PayPal neu khac `PAYPAL_CURRENCY`.
 - `public/payment-result.html`: hien ket qua VNPAY hoac lich su.
 - `public/stripe-success.html`: sync Stripe bang session id.
 - `public/stripe-cancel.html`: trang huy Stripe Checkout va sync cancel ve server.
@@ -216,6 +241,15 @@ API_VNPAY/
 4. MoMo goi `/momo/ipn` va/hoac redirect user ve `/momo/return`.
 5. Server verify signature va ghi `MomoPayment` voi `success`/`failed`.
 
+## 15. Luong PayPal
+
+1. Frontend load PayPal JS SDK bang `GET /paypal/config`.
+2. PayPal Button goi `POST /paypal/orders` voi draft order `currency=usd`.
+3. Server tao PayPal order qua Orders API, chua ghi DB.
+4. User approve tren PayPal popup.
+5. Frontend goi `POST /paypal/orders/:orderId/capture`.
+6. Server capture va ghi `PaypalPayment` voi `success`/`failed`.
+
 ## 16. Deploy Vercel
 
 ### Cach hoat dong
@@ -238,6 +272,7 @@ API_VNPAY/
     { "src": "/payment/(.*)", "dest": "server.js" },
     { "src": "/stripe/(.*)",  "dest": "server.js" },
     { "src": "/momo/(.*)",    "dest": "server.js" },
+    { "src": "/paypal/(.*)",  "dest": "server.js" },
     { "src": "/(.*)",         "dest": "public/$1" }
   ]
 }
@@ -270,6 +305,10 @@ API_VNPAY/
 | `MOMO_CREATE_URL` | MoMo API create URL |
 | `MOMO_REDIRECT_URL` | `https://<domain>/momo/return` |
 | `MOMO_IPN_URL` | `https://<domain>/momo/ipn` |
+| `PAYPAL_CLIENT_ID` | PayPal app client id |
+| `PAYPAL_CLIENT_SECRET` | PayPal app secret |
+| `PAYPAL_ENV` | `sandbox` hoac `live` |
+| `PAYPAL_CURRENCY` | Thuong dung `usd` |
 
 > **Luu y**: Stripe webhook can them endpoint `https://<domain>/stripe/webhook` tren Stripe Dashboard va copy `STRIPE_WEBHOOK_SECRET` ve.
 
@@ -283,10 +322,11 @@ API_VNPAY/
 
 - Khong tao lai `pending` neu khong duoc yeu cau.
 - Khong luu draft order vao MongoDB.
-- VNPAY/local data vao `VNPAY`; Stripe data vao `StripePayment`; MoMo data vao `MomoPayment`.
-- Lich su giao dich phai tra/hien thi `provider`: `vnpay`, `stripe` hoac `momo`.
+- VNPAY/local data vao `VNPAY`; Stripe data vao `StripePayment`; MoMo data vao `MomoPayment`; PayPal data vao `PaypalPayment`.
+- Lich su giao dich phai tra/hien thi `provider`: `vnpay`, `stripe`, `momo` hoac `paypal`.
 - Khong cho tao thanh toan VNPAY khi `currency=usd`.
 - Khong cho tao thanh toan MoMo khi `currency=usd`.
+- Khong cho tao thanh toan PayPal khi `currency` khac `PAYPAL_CURRENCY`.
 - Them gateway moi thi uu tien model/store rieng.
 - Khi sua code, chi sua cac file lien quan truc tiep den chuc nang hoac bug dang lam; khong sua file ngoai pham vi neu khong can thiet hoac khong duoc yeu cau.
 - Sua Stripe webhook phai giu raw body truoc JSON parser.
@@ -301,7 +341,10 @@ node --check src/routes/api.js
 node --check src/routes/payment.js
 node --check src/routes/stripe.js
 node --check src/routes/momo.js
+node --check src/routes/paypal.js
 node --check src/stores/vnpayStore.js
 node --check src/stores/stripeStore.js
 node --check src/stores/momoStore.js
+node --check src/stores/paypalStore.js
+node --check src/services/paypalService.js
 ```

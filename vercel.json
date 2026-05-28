@@ -32,6 +32,10 @@
       "dest": "server.js"
     },
     {
+      "src": "/paypal/(.*)",
+      "dest": "server.js"
+    },
+    {
       "src": "/(.*)",
       "dest": "public/$1"
     }

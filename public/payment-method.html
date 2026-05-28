@@ -109,6 +109,15 @@
           <span class="method-status ready" id="momo-status">Sẵn sàng</span>
         </button>
 
+        <button class="payment-method gateway-ready" id="paypal-btn" onclick="showPaypalButtons()">
+          <span class="method-mark paypal">PP</span>
+          <span class="method-body">
+            <strong>PayPal Checkout</strong>
+            <span>PayPal Buttons, thanh toán USD sandbox</span>
+          </span>
+          <span class="method-status ready" id="paypal-status">Sẵn sàng</span>
+        </button>
+
         <button class="payment-method" disabled>
           <span class="method-mark other">OT</span>
           <span class="method-body">
@@ -117,6 +126,13 @@
           </span>
           <span class="method-status later">Sắp hỗ trợ</span>
         </button>
+      </div>
+
+      <div class="paypal-button-wrap hidden" id="paypal-button-wrap">
+        <div class="paypal-funding-grid">
+          <div id="paypal-wallet-button-container"></div>
+          <div id="paypal-card-button-container"></div>
+        </div>
       </div>
 
       <div class="error-msg" id="error-msg"></div>
@@ -130,9 +146,19 @@ const txnRef = params.get('txnRef') || '';
 const DRAFT_PREFIX = 'paymentDraft:';
 const LAST_DRAFT_KEY = 'paymentDraft:last';
 const STRIPE_SESSION_PREFIX = 'stripeSession:';
+const PAYPAL_ORDER_PREFIX = 'paypalOrder:';
 
 let currentOrder = null;
-let gatewayConfig = { vnpay: false, stripe: false, momo: false };
+let gatewayConfig = {
+  vnpay: false,
+  stripe: false,
+  momo: false,
+  paypal: false,
+  paypalClientId: '',
+  paypalCurrency: 'usd',
+};
+let paypalSdkPromise = null;
+let paypalButtonsRenderedFor = '';
 
 function fmtMoney(amount, currency = 'vnd') {
   const normalizedCurrency = String(currency || 'vnd').toLowerCase();
@@ -168,6 +194,11 @@ function syncGatewayAvailability() {
   const stripeStatus = document.getElementById('stripe-status');
   const momoBtn = document.getElementById('momo-btn');
   const momoStatus = document.getElementById('momo-status');
+  const paypalBtn = document.getElementById('paypal-btn');
+  const paypalStatus = document.getElementById('paypal-status');
+  const paypalWrap = document.getElementById('paypal-button-wrap');
+  const paypalCurrency = String(gatewayConfig.paypalCurrency || 'usd').toLowerCase();
+  const paypalCurrencyMatch = String(currentOrder?.currency || 'vnd').toLowerCase() === paypalCurrency;
 
   const vnpayReady = gatewayConfig.vnpay && !isUsd;
   vnpayBtn.disabled = !vnpayReady;
@@ -189,6 +220,20 @@ function syncGatewayAvailability() {
     ? 'Chỉ hỗ trợ VND'
     : gatewayConfig.momo ? 'Sẵn sàng' : 'Thiếu config';
   momoStatus.className = 'method-status ' + (momoReady ? 'ready' : 'later');
+
+  const paypalReady = gatewayConfig.paypal && paypalCurrencyMatch;
+  paypalBtn.disabled = !paypalReady;
+  paypalBtn.classList.toggle('gateway-ready', paypalReady);
+  paypalStatus.textContent = !gatewayConfig.paypal
+    ? 'Thiếu config'
+    : paypalCurrencyMatch ? 'Sẵn sàng' : `Chỉ hỗ trợ ${paypalCurrency.toUpperCase()}`;
+  paypalStatus.className = 'method-status ' + (paypalReady ? 'ready' : 'later');
+
+  if (!paypalReady) {
+    paypalWrap.classList.add('hidden');
+    clearPaypalButtonContainers();
+    paypalButtonsRenderedFor = '';
+  }
 }
 
 async function loadOrder() {
@@ -267,6 +312,152 @@ async function payWithMomo() {
   }
 }
 
+function loadPaypalSdk() {
+  if (window.paypal) {
+    return Promise.resolve(window.paypal);
+  }
+
+  if (paypalSdkPromise) {
+    return paypalSdkPromise;
+  }
+
+  if (!gatewayConfig.paypalClientId) {
+    return Promise.reject(new Error('Thiếu PayPal Client ID.'));
+  }
+
+  paypalSdkPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    const params = new URLSearchParams({
+      'client-id': gatewayConfig.paypalClientId,
+      currency: String(gatewayConfig.paypalCurrency || 'usd').toUpperCase(),
+      intent: 'capture',
+      components: 'buttons',
+      'enable-funding': 'card',
+      'disable-funding': 'paylater,venmo',
+    });
+
+    script.src = `https://www.paypal.com/sdk/js?${params.toString()}`;
+    script.async = true;
+    script.onload = () => resolve(window.paypal);
+    script.onerror = () => reject(new Error('Không thể tải PayPal Buttons.'));
+    document.head.appendChild(script);
+  });
+
+  return paypalSdkPromise;
+}
+
+function buildPaypalResultUrl(payload) {
+  const params = new URLSearchParams({
+    provider: 'paypal',
+    txnRef: payload.txnRef || currentOrder?.txnRef || '',
+    responseCode: payload.paypalStatus || 'CANCELLED',
+    txnStatus: payload.paypalStatus || payload.status || 'failed',
+    amount: String(payload.amount ?? currentOrder?.amount ?? 0),
+    currency: payload.currency || currentOrder?.currency || gatewayConfig.paypalCurrency || 'usd',
+    verified: '1',
+    stored: '1',
+    success: payload.status === 'success' ? '1' : '0',
+  });
+
+  return `/payment-result.html?${params.toString()}`;
+}
+
+function clearPaypalButtonContainers() {
+  document.getElementById('paypal-wallet-button-container').innerHTML = '';
+  document.getElementById('paypal-card-button-container').innerHTML = '';
+}
+
+function createPaypalButtonOptions(paypal, fundingSource) {
+  return {
+    fundingSource,
+    style: {
+      layout: 'vertical',
+      shape: 'rect',
+    },
+    createOrder: async () => {
+      const { data } = await apiClient.post('/paypal/orders', currentOrder);
+      sessionStorage.setItem(PAYPAL_ORDER_PREFIX + currentOrder.txnRef, data.paypalOrderId);
+      return data.paypalOrderId;
+    },
+    onApprove: async (data) => {
+      const { data: result } = await apiClient.post(
+        `/paypal/orders/${encodeURIComponent(data.orderID)}/capture`,
+        {
+          txnRef: currentOrder.txnRef,
+          draft: currentOrder,
+        }
+      );
+
+      sessionStorage.removeItem(PAYPAL_ORDER_PREFIX + currentOrder.txnRef);
+      window.location.href = buildPaypalResultUrl(result);
+    },
+    onCancel: async (data) => {
+      const paypalOrderId = data.orderID || sessionStorage.getItem(PAYPAL_ORDER_PREFIX + currentOrder.txnRef);
+      const { data: result } = await apiClient.post('/paypal/cancel', {
+        paypalOrderId,
+        txnRef: currentOrder.txnRef,
+        draft: currentOrder,
+      });
+
+      sessionStorage.removeItem(PAYPAL_ORDER_PREFIX + currentOrder.txnRef);
+      window.location.href = buildPaypalResultUrl(result);
+    },
+    onError: (err) => {
+      setError(err?.message || 'Thanh toán PayPal thất bại.');
+    },
+  };
+}
+
+function renderPaypalFundingButton(paypal, fundingSource, selector, fallbackText) {
+  const button = paypal.Buttons(createPaypalButtonOptions(paypal, fundingSource));
+  const container = document.querySelector(selector);
+
+  if (button.isEligible()) {
+    button.render(selector);
+    return;
+  }
+
+  container.innerHTML = `<button class="paypal-unavailable" type="button" disabled>${fallbackText}</button>`;
+}
+
+async function showPaypalButtons() {
+  if (!currentOrder) return;
+
+  const paypalCurrency = String(gatewayConfig.paypalCurrency || 'usd').toLowerCase();
+  if (String(currentOrder.currency || 'vnd').toLowerCase() !== paypalCurrency) {
+    setError(`PayPal chỉ hỗ trợ thanh toán bằng ${paypalCurrency.toUpperCase()} trong cấu hình hiện tại.`);
+    return;
+  }
+
+  setError('');
+  document.getElementById('paypal-button-wrap').classList.remove('hidden');
+
+  if (paypalButtonsRenderedFor === currentOrder.txnRef) {
+    return;
+  }
+
+  clearPaypalButtonContainers();
+
+  try {
+    const paypal = await loadPaypalSdk();
+    renderPaypalFundingButton(
+      paypal,
+      paypal.FUNDING.PAYPAL,
+      '#paypal-wallet-button-container',
+      'PayPal không khả dụng'
+    );
+    renderPaypalFundingButton(
+      paypal,
+      paypal.FUNDING.CARD,
+      '#paypal-card-button-container',
+      'Debit or Credit Card không khả dụng'
+    );
+    paypalButtonsRenderedFor = currentOrder.txnRef;
+  } catch (err) {
+    setError(getApiErrorMessage(err, 'Không thể khởi tạo PayPal Buttons.'));
+  }
+}
+
 function copyCard() {
   navigator.clipboard.writeText('9704198526191432198').then(() => {
     const btn = document.getElementById('copy-btn');
@@ -296,10 +487,17 @@ async function checkHealth() {
   const vnpayBtn = document.getElementById('vnpay-btn');
   const stripeBtn = document.getElementById('stripe-btn');
   const momoBtn = document.getElementById('momo-btn');
+  const paypalBtn = document.getElementById('paypal-btn');
 
   try {
     const { data: d } = await apiClient.get('/api/health');
-    const readyCount = [d.configured, d.stripeConfigured, d.momoConfigured].filter(Boolean).length;
+    const paypalConfig = await apiClient.get('/paypal/config').then(res => res.data).catch(() => ({}));
+    const readyCount = [
+      d.configured,
+      d.stripeConfigured,
+      d.momoConfigured,
+      d.paypalConfigured,
+    ].filter(Boolean).length;
     badge.textContent = readyCount ? `${readyCount} cổng sẵn sàng` : 'Thiếu config .env';
     badge.className = 'status-badge ' + (readyCount ? 'ok' : 'warn');
 
@@ -307,6 +505,9 @@ async function checkHealth() {
       vnpay: Boolean(d.configured),
       stripe: Boolean(d.stripeConfigured),
       momo: Boolean(d.momoConfigured),
+      paypal: Boolean(d.paypalConfigured && paypalConfig.clientId),
+      paypalClientId: paypalConfig.clientId || '',
+      paypalCurrency: paypalConfig.currency || d.paypal?.currency || 'usd',
     };
     syncGatewayAvailability();
   } catch {
@@ -318,6 +519,8 @@ async function checkHealth() {
     stripeBtn.classList.remove('gateway-ready');
     momoBtn.disabled = true;
     momoBtn.classList.remove('gateway-ready');
+    paypalBtn.disabled = true;
+    paypalBtn.classList.remove('gateway-ready');
   }
 }
 

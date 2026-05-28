@@ -68,6 +68,7 @@ function gatewayLabel(provider) {
   return {
     stripe: 'Stripe',
     momo: 'MoMo',
+    paypal: 'PayPal',
     vnpay: 'VNPAY',
   }[provider] || 'VNPAY';
 }
@@ -75,17 +76,20 @@ function gatewayLabel(provider) {
 function isSuccessfulResponse(result) {
   if (result.provider === 'stripe') return result.success;
   if (result.provider === 'momo') return String(result.resultCode ?? result.responseCode) === '0';
+  if (result.provider === 'paypal') return result.success || result.responseCode === 'COMPLETED';
   return result.responseCode === '00';
 }
 
 function verificationLabel(provider) {
   if (provider === 'stripe') return 'Stripe';
   if (provider === 'momo') return 'Chữ ký MoMo';
+  if (provider === 'paypal') return 'PayPal Capture';
   return 'Chữ ký Return';
 }
 
 function verificationText(result) {
   if (result.provider === 'stripe') return 'Đã xác nhận';
+  if (result.provider === 'paypal') return result.success ? 'Đã capture' : 'Không capture';
   return result.verified ? 'Hợp lệ' : 'Không hợp lệ';
 }
 
@@ -101,6 +105,7 @@ const txnStatus = p.get('txnStatus') || '?';
 const amount = p.get('amount') || '0';
 const provider = p.get('provider') || 'vnpay';
 const urlStored = p.get('stored') === '1';
+const urlCurrency = p.get('currency') || '';
 
 const page = document.getElementById('result-page');
 const card = document.getElementById('result-card');
@@ -143,22 +148,35 @@ async function fetchDbRecord(ref) {
 
     const dbSection = document.getElementById('db-section');
     const dbRows = document.getElementById('db-rows');
-    const momoRows = tx.provider === 'momo'
+    const providerRows = tx.provider === 'momo'
       ? [
         ['Mã MoMo', String(tx.resultCode ?? 'N/A'), tx.status === 'success' ? 'ok' : 'fail'],
         ['Thông điệp MoMo', tx.message || '—', tx.status === 'success' ? 'ok' : 'fail'],
       ]
-      : [];
+      : tx.provider === 'paypal'
+        ? [
+          ['PayPal Order', tx.paypalOrderId || '—', tx.paypalOrderId ? 'ok' : 'warn'],
+          ['Capture ID', tx.captureId || '—', tx.captureId ? 'ok' : 'warn'],
+          ['PayPal status', tx.paypalStatus || 'N/A', tx.status === 'success' ? 'ok' : 'fail'],
+        ]
+        : [];
+    const lifecycleRows = tx.provider === 'paypal'
+      ? [
+        ['Capture', tx.captureId ? 'Đã capture' : 'Chưa capture', tx.captureId ? 'ok' : 'warn'],
+      ]
+      : [
+        ['IPN xác thực', tx.ipnVerified ? 'Xác thực thành công' : 'Chưa nhận IPN', tx.ipnVerified ? 'ok' : 'warn'],
+        ['IPN lúc', fmtDate(tx.ipnReceivedAt), ''],
+        ['Return xác thực', tx.returnVerified ? 'Hợp lệ' : 'Không hợp lệ', tx.returnVerified ? 'ok' : 'fail'],
+      ];
     dbSection.style.display = '';
 
     dbRows.innerHTML = [
       ['Cổng thanh toán', gatewayLabel(tx.provider), 'ok'],
       ['Tiền tệ', String(tx.currency || 'vnd').toUpperCase(), ''],
       ['Trạng thái', tx.status, tx.status === 'success' ? 'ok' : tx.status === 'failed' ? 'fail' : 'warn'],
-      ...momoRows,
-      ['IPN xác thực', tx.ipnVerified ? 'Xác thực thành công' : 'Chưa nhận IPN', tx.ipnVerified ? 'ok' : 'warn'],
-      ['IPN lúc', fmtDate(tx.ipnReceivedAt), ''],
-      ['Return xác thực', tx.returnVerified ? 'Hợp lệ' : 'Không hợp lệ', tx.returnVerified ? 'ok' : 'fail'],
+      ...providerRows,
+      ...lifecycleRows,
       ['Thanh toán lúc', fmtDate(tx.paidAt), tx.paidAt ? 'ok' : ''],
       ['Tạo lúc', fmtDate(tx.createdAt), ''],
       ['Địa chỉ IP', tx.ipAddr || '—', ''],
@@ -175,7 +193,24 @@ async function fetchDbRecord(ref) {
   }
 }
 
+
 function resultFromUrl() {
+  if (provider === 'paypal') {
+    return {
+      txnRef,
+      amount,
+      currency: urlCurrency || 'usd',
+      responseCode,
+      txnStatus,
+      verified: true,
+      success: urlSuccess,
+      state: urlSuccess ? 'success' : 'failed',
+      ipnVerified: true,
+      provider: 'paypal',
+      dbSaved: urlStored,
+    };
+  }
+
   if (provider === 'momo') {
     return {
       txnRef,
@@ -222,6 +257,10 @@ function resultFromTransaction(tx) {
     finalResponseCode = String(tx.resultCode ?? 'N/A');
     finalTxnStatus = tx.message || tx.status || 'N/A';
     verified = Boolean(tx.returnVerified || tx.ipnVerified);
+  } else if (tx.provider === 'paypal') {
+    finalResponseCode = tx.paypalStatus || tx.status || 'N/A';
+    finalTxnStatus = tx.captureId || tx.status || 'N/A';
+    verified = true;
   }
 
   return {
@@ -255,6 +294,12 @@ function resultSubtitle(result) {
     return result.dbSaved
       ? 'MoMo đã gửi kết quả thanh toán về hệ thống và đã lưu vào MongoDB'
       : 'MoMo đã gửi kết quả thanh toán về hệ thống';
+  }
+
+  if (result.provider === 'paypal') {
+    return result.state === 'success'
+      ? 'PayPal đã capture thanh toán và lưu kết quả vào MongoDB'
+      : 'PayPal chưa capture thanh toán; hệ thống đã lưu kết quả thất bại';
   }
 
   return result.verified

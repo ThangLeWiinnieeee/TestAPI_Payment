@@ -3,6 +3,7 @@
 const { isConfigured, VNP_RETURNURL } = require('../config');
 const { isStripeConfigured, STRIPE_SUCCESS_URL, STRIPE_CANCEL_URL } = require('../config/stripe');
 const { isMomoConfigured, MOMO_REDIRECT_URL, MOMO_IPN_URL } = require('../config/momo');
+const { isPaypalConfigured, PAYPAL_CURRENCY, PAYPAL_ENV } = require('../config/paypal');
 const {
   generateTxnRef,
   normalizeIp,
@@ -14,6 +15,7 @@ const {
 const vnpayStore = require('../stores/vnpayStore');
 const stripeStore = require('../stores/stripeStore');
 const momoStore = require('../stores/momoStore');
+const paypalStore = require('../stores/paypalStore');
 
 function createHttpError(status, message) {
   const error = new Error(message);
@@ -30,6 +32,7 @@ function getHealthStatus() {
     configured: isConfigured(),
     stripeConfigured: isStripeConfigured(),
     momoConfigured: isMomoConfigured(),
+    paypalConfigured: isPaypalConfigured(),
     sandbox: true,
     urls: {
       vnpayReturn: VNP_RETURNURL,
@@ -37,6 +40,10 @@ function getHealthStatus() {
       stripeCancel: STRIPE_CANCEL_URL,
       momoRedirect: MOMO_REDIRECT_URL,
       momoIpn: MOMO_IPN_URL,
+    },
+    paypal: {
+      currency: PAYPAL_CURRENCY,
+      environment: PAYPAL_ENV,
     },
   };
 }
@@ -80,16 +87,18 @@ async function listTransactions({ page = 1, limit = 20, status }) {
   const safePage = Math.max(1, page);
   const safeLimit = Math.min(100, Math.max(1, limit));
 
-  const [vnpayResult, stripeResult, momoResult] = await Promise.all([
+  const [vnpayResult, stripeResult, momoResult, paypalResult] = await Promise.all([
     vnpayStore.listAll({ page: 1, limit: 1000, status }),
     stripeStore.listAll({ page: 1, limit: 1000, status }),
     momoStore.listAll({ page: 1, limit: 1000, status }),
+    paypalStore.listAll({ page: 1, limit: 1000, status }),
   ]);
 
   const data = [
     ...vnpayResult.data.map((item) => ({ ...item, provider: 'vnpay', currency: item.currency || 'vnd' })),
     ...stripeResult.data.map((item) => ({ ...item, provider: 'stripe' })),
     ...momoResult.data.map((item) => ({ ...item, provider: 'momo', currency: item.currency || 'vnd' })),
+    ...paypalResult.data.map((item) => ({ ...item, provider: 'paypal' })),
   ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   const start = (safePage - 1) * safeLimit;
@@ -128,6 +137,12 @@ async function findTransaction(txnRef, provider = '') {
     return { ...txn, provider: 'momo', currency: txn.currency || 'vnd' };
   }
 
+  if (normalizedProvider === 'paypal') {
+    const txn = await paypalStore.findByRef(txnRef);
+    if (!txn) throw createHttpError(404, 'Không tìm thấy giao dịch PayPal.');
+    return { ...txn, provider: 'paypal' };
+  }
+
   // Không chỉ định provider → tìm lần lượt
   const vnpayTxn = await vnpayStore.findByRef(txnRef);
   if (vnpayTxn) return { ...vnpayTxn, provider: 'vnpay', currency: vnpayTxn.currency || 'vnd' };
@@ -136,8 +151,11 @@ async function findTransaction(txnRef, provider = '') {
   if (stripeTxn) return { ...stripeTxn, provider: 'stripe' };
 
   const momoTxn = await momoStore.findByRef(txnRef);
-  if (!momoTxn) throw createHttpError(404, 'Không tìm thấy giao dịch.');
-  return { ...momoTxn, provider: 'momo', currency: momoTxn.currency || 'vnd' };
+  if (momoTxn) return { ...momoTxn, provider: 'momo', currency: momoTxn.currency || 'vnd' };
+
+  const paypalTxn = await paypalStore.findByRef(txnRef);
+  if (!paypalTxn) throw createHttpError(404, 'Không tìm thấy giao dịch.');
+  return { ...paypalTxn, provider: 'paypal' };
 }
 
 module.exports = {

@@ -108,6 +108,12 @@
   border: 1px solid rgba(255,90,160,0.30);
 }
 
+.method-mark.paypal {
+  background: rgba(0, 112, 186, 0.12);
+  color: #0070ba;
+  border: 1px solid rgba(0, 112, 186, 0.30);
+}
+
 .method-mark.other {
   background: rgba(124,111,247,0.12);
   color: var(--ipn-color);
@@ -146,6 +152,31 @@
 .method-status.later {
   background: var(--surface2);
   color: var(--muted);
+}
+
+.paypal-button-wrap {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(0, 112, 186, 0.25);
+  border-radius: var(--r-md);
+  background: var(--bg);
+}
+
+.paypal-funding-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.paypal-unavailable {
+  width: 100%;
+  min-height: 45px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  background: var(--surface2);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 @media (max-width: 640px) {

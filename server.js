@@ -26,7 +26,8 @@ app.use(async (req, res, next) => {
     req.path.startsWith('/api') ||
     req.path.startsWith('/payment') ||
     req.path.startsWith('/stripe') ||
-    req.path.startsWith('/momo');
+    req.path.startsWith('/momo') ||
+    req.path.startsWith('/paypal');
 
   if (!needsDb) {
     return next();

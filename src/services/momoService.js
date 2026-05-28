@@ -25,6 +25,7 @@ const {
 const vnpayStore = require('../stores/vnpayStore');
 const stripeStore = require('../stores/stripeStore');
 const momoStore = require('../stores/momoStore');
+const paypalStore = require('../stores/paypalStore');
 
 const CREATE_SIGNATURE_KEYS = [
   'accessKey',
@@ -110,10 +111,11 @@ function verifyMomoResult(payload) {
 }
 
 async function assertOrderNotPaid(txnRef) {
-  const [vnpayPayment, stripePayment, momoPayment] = await Promise.all([
+  const [vnpayPayment, stripePayment, momoPayment, paypalPayment] = await Promise.all([
     vnpayStore.findByRef(txnRef),
     stripeStore.findByRef(txnRef),
     momoStore.findByRef(txnRef),
+    paypalStore.findByRef(txnRef),
   ]);
 
   if (vnpayPayment?.status === 'success') {
@@ -126,6 +128,10 @@ async function assertOrderNotPaid(txnRef) {
 
   if (momoPayment?.status === 'success') {
     throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng MoMo.');
+  }
+
+  if (paypalPayment?.status === 'success') {
+    throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng PayPal.');
   }
 }
 

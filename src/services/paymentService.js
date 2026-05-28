@@ -22,6 +22,9 @@ const {
 } = require('../helpers');
 
 const vnpayStore = require('../stores/vnpayStore');
+const stripeStore = require('../stores/stripeStore');
+const momoStore = require('../stores/momoStore');
+const paypalStore = require('../stores/paypalStore');
 
 function createHttpError(status, message) {
   const error = new Error(message);
@@ -42,6 +45,28 @@ function verifyVnpayQuery(query) {
   return { params, verified };
 }
 
+async function assertOrderNotPaidByOtherGateway(txnRef) {
+  if (!txnRef) return;
+
+  const [stripePayment, momoPayment, paypalPayment] = await Promise.all([
+    stripeStore.findByRef(txnRef),
+    momoStore.findByRef(txnRef),
+    paypalStore.findByRef(txnRef),
+  ]);
+
+  if (stripePayment?.status === 'success') {
+    throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng Stripe.');
+  }
+
+  if (momoPayment?.status === 'success') {
+    throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng MoMo.');
+  }
+
+  if (paypalPayment?.status === 'success') {
+    throw createHttpError(409, 'Đơn hàng đã được thanh toán bằng PayPal.');
+  }
+}
+
 async function createPaymentUrl({ body, headers, socket, ip }) {
   if (!isConfigured()) {
     throw createHttpError(
@@ -52,6 +77,7 @@ async function createPaymentUrl({ body, headers, socket, ip }) {
 
   const existingTxnRef = (body.txnRef || '').toString().trim();
   const existingOrder = existingTxnRef ? await vnpayStore.findByRef(existingTxnRef) : null;
+  await assertOrderNotPaidByOtherGateway(existingTxnRef);
   const currency = normalizeCurrency(existingOrder?.currency || body.currency);
 
   if (currency !== 'vnd') {
